@@ -23,15 +23,19 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  let recommendedSlot = slots.find(s => s.isBookable && !s.isFull)
+  let recommendedSlot: Record<string, unknown> | undefined = slots.find(s => s.isBookable && !s.isFull)
+  
   if (recommendedSlot) {
     recommendedSlot = { ...recommendedSlot, isRecommended: true }
-  } else if (sunday) {
-    const firstSlot = SLOTS[0]
-    recommendedSlot = { slotId: firstSlot.id, timeRange: firstSlot.label, period: 'morning', label: firstSlot.label, peopleCount: 0, capacity: CAPACITY, congestionLevel: 'low', isRecommended: true, isBookable: true, isFull: false, isSunday: false, reason: null, bookings: [], _isTomorrow: true }
   } else {
     const firstSlot = SLOTS[0]
-    recommendedSlot = { slotId: firstSlot.id, timeRange: firstSlot.label, period: 'morning', label: firstSlot.label, peopleCount: 0, capacity: CAPACITY, congestionLevel: 'low', isRecommended: true, isBookable: true, isFull: false, isSunday: false, reason: null, bookings: [], _isTomorrow: true }
+    recommendedSlot = {
+      slotId: firstSlot.id, timeRange: firstSlot.label, period: 'morning',
+      label: firstSlot.label, peopleCount: 0, capacity: CAPACITY,
+      congestionLevel: 'low', isRecommended: true, isBookable: true,
+      isFull: false, isSunday: false, reason: null, bookings: [],
+      _isTomorrow: true,
+    }
   }
 
   return NextResponse.json({ date, recommendedSlot, slots })

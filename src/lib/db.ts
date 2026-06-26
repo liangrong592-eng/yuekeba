@@ -1,27 +1,18 @@
-// Turso HTTP API 客户端
-// 不需要 @libsql/client，避免原生模块依赖问题
-
 const TURSO_DB_URL = process.env.DATABASE_URL || ''
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || ''
 
-// Turso HTTP API endpoint：libsql:// → https://
 function getHttpUrl() {
-  // 本地开发用 SQLite（通过 next dev 的 Node.js 环境）
-  if (!TURSO_DB_URL || TURSO_DB_URL.startsWith('file:')) {
-    return null
-  }
+  if (!TURSO_DB_URL || TURSO_DB_URL.startsWith('file:')) return null
   return TURSO_DB_URL.replace('libsql://', 'https://')
 }
 
-// Turso HTTP API 查询
-async function executeQuery(sql: string, args: unknown[] = []) {
+async function executeQuery(sql: string, args: (string | number)[] = []) {
   const httpUrl = getHttpUrl()
   if (!httpUrl) {
-    // 本地开发：使用动态 import @libsql/client
     const { createClient } = await import('@libsql/client')
     const client = createClient({ url: TURSO_DB_URL || 'file:./dev.db' })
-    const result = await client.execute({ sql, args })
-    return result.rows
+    const result = await client.execute(sql, args)
+    return result.rows as Record<string, unknown>[]
   }
   
   const res = await fetch(`${httpUrl}/v2/pipeline`, {
@@ -38,10 +29,7 @@ async function executeQuery(sql: string, args: unknown[] = []) {
     }),
   })
   
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Turso query failed: ${res.status} ${text}`)
-  }
+  if (!res.ok) throw new Error(`Turso query failed: ${res.status}`)
   
   const data = await res.json()
   const result = data.results?.[0]
@@ -57,22 +45,21 @@ async function executeQuery(sql: string, args: unknown[] = []) {
   })
 }
 
-// 预约相关操作
 export const db = {
   async getBookingsByDate(date: string) {
     const rows = await executeQuery('SELECT name, slot FROM Booking WHERE date = ? AND cancelled = 0 ORDER BY createdAt ASC', [date])
     const grouped: Record<string, { name: string }[]> = {}
     for (const row of rows) {
-      const slot = (row as any).slot as string
-      if (!grouped[slot]) grouped[slot] = []
-      grouped[slot].push({ name: (row as any).name as string })
+      const r = row as any
+      if (!grouped[r.slot]) grouped[r.slot] = []
+      grouped[r.slot].push({ name: r.name })
     }
     return grouped
   },
 
   async findBooking(name: string, date: string) {
     const rows = await executeQuery('SELECT id, name, confirmCode, date, slot, bookingNumber FROM Booking WHERE name = ? AND date = ? AND cancelled = 0 LIMIT 1', [name, date])
-    return rows[0] || null
+    return (rows[0] as any) || null
   },
 
   async findBookingsByName(name: string) {
@@ -80,7 +67,7 @@ export const db = {
   },
 
   async createBooking(name: string, date: string, slot: string, confirmCode: string, bookingNumber: string) {
-    const id = crypto.randomUUID?.() || Math.random().toString(36).slice(2)
+    const id = crypto.randomUUID()
     await executeQuery('INSERT INTO Booking (id, name, confirmCode, date, slot, bookingNumber, cancelled) VALUES (?, ?, ?, ?, ?, ?, 0)', [id, name, confirmCode, date, slot, bookingNumber])
     return { id, name, confirmCode, date, slot, bookingNumber }
   },
@@ -95,7 +82,7 @@ export const db = {
 
   async getBookingById(id: string) {
     const rows = await executeQuery('SELECT * FROM Booking WHERE id = ?', [id])
-    return rows[0] || null
+    return (rows[0] as any) || null
   },
 
   async getBookingCount(date: string) {
@@ -105,7 +92,7 @@ export const db = {
 
   async getAdminBookings(filters: { date?: string; slot?: string; status?: string; search?: string }) {
     let sql = 'SELECT * FROM Booking WHERE 1=1'
-    const args: unknown[] = []
+    const args: (string | number)[] = []
     if (filters.date) { sql += ' AND date = ?'; args.push(filters.date) }
     if (filters.slot) { sql += ' AND slot = ?'; args.push(filters.slot) }
     if (filters.status === 'active') sql += ' AND cancelled = 0'
@@ -117,7 +104,7 @@ export const db = {
 
   async getActiveCount(filters: { date?: string; slot?: string; search?: string }) {
     let sql = 'SELECT COUNT(*) as count FROM Booking WHERE cancelled = 0'
-    const args: unknown[] = []
+    const args: (string | number)[] = []
     if (filters.date) { sql += ' AND date = ?'; args.push(filters.date) }
     if (filters.slot) { sql += ' AND slot = ?'; args.push(filters.slot) }
     if (filters.search) { sql += ' AND name LIKE ?'; args.push(`%${filters.search}%`) }
@@ -127,7 +114,7 @@ export const db = {
 
   async getCancelledCount(filters: { date?: string; slot?: string; search?: string }) {
     let sql = 'SELECT COUNT(*) as count FROM Booking WHERE cancelled = 1'
-    const args: unknown[] = []
+    const args: (string | number)[] = []
     if (filters.date) { sql += ' AND date = ?'; args.push(filters.date) }
     if (filters.slot) { sql += ' AND slot = ?'; args.push(filters.slot) }
     if (filters.search) { sql += ' AND name LIKE ?'; args.push(`%${filters.search}%`) }
@@ -135,12 +122,12 @@ export const db = {
     return Number((rows[0] as any)?.count || 0)
   },
 
-  async getMonthlyRanking(monthPrefix: string, limit = 10, searchName?: string) {
+  async getMonthlyRanking(monthPrefix: string, limit = 0, searchName?: string) {
     let sql = "SELECT name, COUNT(*) as count FROM Booking WHERE date LIKE ? AND cancelled = 0"
-    const args: unknown[] = [`${monthPrefix}%`]
+    const args: (string | number)[] = [`${monthPrefix}%`]
     if (searchName) { sql += ' AND name LIKE ?'; args.push(`%${searchName}%`) }
     sql += ' GROUP BY name ORDER BY count DESC'
-    if (limit) sql += ` LIMIT ${limit}`
+    if (limit > 0) sql += ` LIMIT ${limit}`
     return executeQuery(sql, args)
   },
 
