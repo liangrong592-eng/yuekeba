@@ -5,7 +5,7 @@ let client: ReturnType<typeof createClient> | null = null
 function getClient() {
   if (client) return client
   
-  const url = process.env.DATABASE_URL || 'file:./dev.db'
+  const url = process.env.DB_URL || 'file:./dev.db'
   
   client = createClient({ url })
   return client
