@@ -14,6 +14,7 @@ function Main() {
   const[bookedId,setBookedId]=useState<string|null>(null);const[expandedId,setExpandedId]=useState<string|null>(null)
   const[loading,setLoading]=useState(true)
   const[showBook,setShowBook]=useState(false);const[pendingSlot,setPendingSlot]=useState<string|null>(null);const[pendingDate,setPendingDate]=useState<string|null>(null)
+  const[bookLoading,setBookLoading]=useState(false)
   const{show}=useToast()
 
   const load=useCallback(async()=>{
@@ -53,10 +54,8 @@ function Main() {
     finally{setBookLoading(false);setPendingSlot(null);setPendingDate(null)}
   }
 
-  const[bookLoading,setBookLoading]=useState(false)
-
   return (
-    <main className="mx-auto pb-6" style={{maxWidth:390}}>
+    <div className="mx-auto min-h-screen bg-white" style={{maxWidth:390}}>
       <Header date={date} onChange={setDate} />
       <div className="px-5 pt-4">
         {rec&&<div className="mb-4">
@@ -78,10 +77,8 @@ function Main() {
         )}
         <div className="mt-4"><RankingPanel/></div>
       </div>
-
-      {/* 预约弹窗 */}
       {showBook&&<BookDialog onConfirm={confirmBook} onClose={()=>setShowBook(false)} loading={bookLoading}/>}
-    </main>
+    </div>
   )
 }
 
