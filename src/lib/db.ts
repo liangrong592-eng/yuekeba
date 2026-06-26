@@ -1,6 +1,25 @@
 const TURSO_DB_URL = process.env.DATABASE_URL || ''
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || ''
 
+const INIT_SQL = `
+CREATE TABLE IF NOT EXISTS Booking (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  confirmCode TEXT NOT NULL,
+  date TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  bookingNumber TEXT NOT NULL UNIQUE,
+  cancelled INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  cancelledAt TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_booking_name_date ON Booking(name, date);
+CREATE INDEX IF NOT EXISTS idx_booking_date ON Booking(date);
+CREATE INDEX IF NOT EXISTS idx_booking_date_slot ON Booking(date, slot);
+`
+
+let initialized = false
+
 function getHttpUrl() {
   if (!TURSO_DB_URL || TURSO_DB_URL.startsWith('file:')) return null
   return TURSO_DB_URL.replace('libsql://', 'https://')
@@ -8,19 +27,31 @@ function getHttpUrl() {
 
 async function executeQuery(sql: string, args: (string | number)[] = []) {
   const httpUrl = getHttpUrl()
+  
   if (!httpUrl) {
     const { createClient } = await import('@libsql/client')
     const client = createClient({ url: TURSO_DB_URL || 'file:./dev.db' })
+    if (!initialized) {
+      await client.execute(INIT_SQL)
+      initialized = true
+    }
     const result = await client.execute(sql, args)
     return result.rows as Record<string, unknown>[]
   }
   
+  // 首次连接初始化表
+  if (!initialized) {
+    const initRes = await fetch(`${httpUrl}/v2/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TURSO_AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: INIT_SQL, args: [] } }, { type: 'close' }] }),
+    })
+    if (initRes.ok) initialized = true
+  }
+  
   const res = await fetch(`${httpUrl}/v2/pipeline`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${TURSO_AUTH_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${TURSO_AUTH_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       requests: [
         { type: 'execute', stmt: { sql, args: args.map(a => ({ type: typeof a === 'number' ? 'integer' : 'text', value: String(a) })) } },
@@ -30,7 +61,6 @@ async function executeQuery(sql: string, args: (string | number)[] = []) {
   })
   
   if (!res.ok) throw new Error(`Turso query failed: ${res.status}`)
-  
   const data = await res.json()
   const result = data.results?.[0]
   if (result?.type === 'error') throw new Error(`Turso error: ${result.error?.message}`)
