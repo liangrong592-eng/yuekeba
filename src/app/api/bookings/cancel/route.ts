@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/db'
+import { SLOTS, canCancelBooking } from '@/lib/time'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,8 +12,6 @@ export async function POST(request: NextRequest) {
     const matched = bookings.find((b: any) => b.confirmCode === confirmCode)
     if (!matched) return NextResponse.json({ success: false, error: '确认码错误' }, { status: 403 })
     // 检查是否可取消（提前2小时）
-    const { canCancelBooking } = await import('@/lib/time')
-    const { SLOTS } = await import('@/lib/time')
     const slotDef = SLOTS.find(s => s.id === (matched as any).slot)
     if (slotDef) {
       const { cancellable, reason } = canCancelBooking((matched as any).date, slotDef)

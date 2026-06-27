@@ -1,5 +1,3 @@
-
-
 const TURSO_DB_URL = process.env.DATABASE_URL || ''
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || ''
 
@@ -31,15 +29,31 @@ async function tursoQuery(sql: string, args: (string | number)[] = []) {
   })
 }
 
+// 本地模式 / Vercel 回退模式：使用 sql.js（纯 WASM，无需原生模块）
+// WASM 文件已复制到 /public/sql-wasm.wasm，在 Vercel 上作为静态资源提供
 let localDb: any = null
-const WASM_PATH = require("path").join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm')
 
-const getLocalDbPath = () => require("path"); async function getLocalDb() {
+// Vercel 上使用静态资源路径，本地开发使用 node_modules 路径
+const isVercel = !!process.env.VERCEL
+
+async function getLocalDb() {
   if (localDb) return localDb
+  
   const initSqlJs = await import('sql.js')
+  
+  // Vercel 上 WASM 通过 public/ 目录的静态 URL 加载
+  // 本地开发通过 node_modules 加载
   const SQL = await initSqlJs.default({
-    locateFile: () => WASM_PATH
+    locateFile: (file: string) => {
+      if (isVercel) {
+        // Vercel 上 public 目录的静态资源路径
+        return `/${file}`
+      }
+      // 本地开发：直接从 node_modules 加载
+      return require('path').join(process.cwd(), 'node_modules', 'sql.js', 'dist', file)
+    }
   })
+  
   localDb = new SQL.Database()
   
   localDb.run(`CREATE TABLE IF NOT EXISTS Booking (
@@ -70,10 +84,12 @@ function localQuery(sql: string, args: (string | number)[] = []) {
   })
 }
 
+// Vercel Serverless 环境下 fs.writeFileSync 会失败（只读文件系统）
 async function saveLocalDb() {
-  if (!localDb) return
+  if (!localDb || isVercel) return
   try {
     const fs = await import('fs')
+    const path = await import('path')
     const data = localDb.export()
     fs.writeFileSync(path.join(process.cwd(), 'dev.db'), Buffer.from(data))
   } catch {}

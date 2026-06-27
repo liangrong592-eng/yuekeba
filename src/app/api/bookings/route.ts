@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { SLOTS, isSlotBookable, isSunday } from '@/lib/time'
+import { SLOTS, isSlotBookable, isSunday, getBeijingDateStr } from '@/lib/time'
 import db from '@/lib/db'
 import { createBooking } from '@/lib/booking'
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const date = request.nextUrl.searchParams.get('date') || require('@/lib/time').getBeijingDateStr()
+  const date = request.nextUrl.searchParams.get('date') || getBeijingDateStr()
   const grouped = await db.getBookingsByDate(date)
   return NextResponse.json({ date, bookings: grouped })
 }
