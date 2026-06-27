@@ -1,11 +1,45 @@
 const TURSO_DB_URL = process.env.DATABASE_URL || ''
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || ''
+let tursoInitialized = false
 
 function isTursoMode() {
   return TURSO_DB_URL.startsWith('libsql://')
 }
 
+async function ensureTursoTable() {
+  if (tursoInitialized) return
+  await tursoQueryRaw(`CREATE TABLE IF NOT EXISTS Booking (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, confirmCode TEXT NOT NULL,
+    date TEXT NOT NULL, slot TEXT NOT NULL, bookingNumber TEXT NOT NULL UNIQUE,
+    cancelled INTEGER NOT NULL DEFAULT 0,
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    cancelledAt TEXT
+  )`)
+  tursoInitialized = true
+}
+
+async function tursoQueryRaw(sql: string) {
+  const httpUrl = TURSO_DB_URL.replace('libsql://', 'https://')
+  const res = await fetch(`${httpUrl}/v2/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TURSO_AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [
+        { type: 'execute', stmt: { sql, args: [] } },
+        { type: 'close' },
+      ],
+    }),
+  })
+  if (!res.ok) throw new Error(`Turso query failed: ${res.status}`)
+  const data = await res.json()
+  const result = data.results?.[0]
+  if (result?.type === 'error') throw new Error(`Turso error: ${result.error?.message}`)
+}
+
 async function tursoQuery(sql: string, args: (string | number)[] = []) {
+  // 首次查询前确保表已创建
+  await ensureTursoTable()
+  
   const httpUrl = TURSO_DB_URL.replace('libsql://', 'https://')
   const res = await fetch(`${httpUrl}/v2/pipeline`, {
     method: 'POST',
