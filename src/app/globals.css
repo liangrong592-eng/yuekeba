@@ -1,3 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 html { -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; }
 body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif; background: #FFFFFF; color: #1D1D1F; }
