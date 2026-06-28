@@ -1,31 +1,28 @@
 const TURSO_DB_URL = process.env.DATABASE_URL || ''
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || ''
-let tursoInitialized = false
 
 function isTursoMode() {
   return TURSO_DB_URL.startsWith('libsql://')
 }
 
+// ===== Turso 模式（仅当 DATABASE_URL 为 libsql:// 时启用）=====
+let tursoInitialized = false
+
 async function ensureTursoTable() {
   if (tursoInitialized) return
-  await tursoQueryRaw(`CREATE TABLE IF NOT EXISTS Booking (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, confirmCode TEXT NOT NULL,
-    date TEXT NOT NULL, slot TEXT NOT NULL, bookingNumber TEXT NOT NULL UNIQUE,
-    cancelled INTEGER NOT NULL DEFAULT 0,
-    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    cancelledAt TEXT
-  )`)
-  tursoInitialized = true
-}
-
-async function tursoQueryRaw(sql: string) {
   const httpUrl = TURSO_DB_URL.replace('libsql://', 'https://')
   const res = await fetch(`${httpUrl}/v2/pipeline`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TURSO_AUTH_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       requests: [
-        { type: 'execute', stmt: { sql, args: [] } },
+        { type: 'execute', stmt: { sql: `CREATE TABLE IF NOT EXISTS Booking (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, confirmCode TEXT NOT NULL,
+          date TEXT NOT NULL, slot TEXT NOT NULL, bookingNumber TEXT NOT NULL UNIQUE,
+          cancelled INTEGER NOT NULL DEFAULT 0,
+          createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          cancelledAt TEXT
+        )`, args: [] } },
         { type: 'close' },
       ],
     }),
@@ -34,12 +31,11 @@ async function tursoQueryRaw(sql: string) {
   const data = await res.json()
   const result = data.results?.[0]
   if (result?.type === 'error') throw new Error(`Turso error: ${result.error?.message}`)
+  tursoInitialized = true
 }
 
 async function tursoQuery(sql: string, args: (string | number)[] = []) {
-  // 首次查询前确保表已创建
   await ensureTursoTable()
-  
   const httpUrl = TURSO_DB_URL.replace('libsql://', 'https://')
   const res = await fetch(`${httpUrl}/v2/pipeline`, {
     method: 'POST',
@@ -63,27 +59,21 @@ async function tursoQuery(sql: string, args: (string | number)[] = []) {
   })
 }
 
-// 本地模式 / Vercel 回退模式：使用 sql.js（纯 WASM，无需原生模块）
-// WASM 文件已复制到 /public/sql-wasm.wasm，在 Vercel 上作为静态资源提供
+// ===== sql.js 本地模式（默认，零成本）=====
 let localDb: any = null
 
-// Vercel 上使用静态资源路径，本地开发使用 node_modules 路径
-const isVercel = !!process.env.VERCEL
+const isServerless = !!process.env.VERCEL || !!process.env.ZEABUR
 
 async function getLocalDb() {
   if (localDb) return localDb
   
   const initSqlJs = await import('sql.js')
   
-  // Vercel 上 WASM 通过 public/ 目录的静态 URL 加载
-  // 本地开发通过 node_modules 加载
   const SQL = await initSqlJs.default({
     locateFile: (file: string) => {
-      if (isVercel) {
-        // Vercel 上 public 目录的静态资源路径
-        return `/${file}`
-      }
-      // 本地开发：直接从 node_modules 加载
+      // Serverless 环境：WASM 从 public/ 目录加载
+      // 本地开发：从 node_modules 直接加载
+      if (isServerless) return `/${file}`
       return require('path').join(process.cwd(), 'node_modules', 'sql.js', 'dist', file)
     }
   })
@@ -118,9 +108,9 @@ function localQuery(sql: string, args: (string | number)[] = []) {
   })
 }
 
-// Vercel Serverless 环境下 fs.writeFileSync 会失败（只读文件系统）
+// Serverless 环境下文件系统只读，跳过持久化
 async function saveLocalDb() {
-  if (!localDb || isVercel) return
+  if (!localDb || isServerless) return
   try {
     const fs = await import('fs')
     const path = await import('path')

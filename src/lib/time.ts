@@ -12,19 +12,25 @@ export const SLOTS: readonly Slot[] = [
   { id: '18:30-19:30', label: '18:30 — 19:30', sublabel: '晚上', startHour: 18, startMinute: 30 },
 ] as const
 
-/** 获取当前北京时间（返回 Date 对象） */
-export function getBeijingNow(): Date {
-  const now = new Date()
-  // now.getTime() 返回的是 UTC 毫秒数，直接加 8 小时偏移即可
-  return new Date(now.getTime() + 8 * 60 * 60 * 1000)
-}
+/**
+ * 所有时间计算统一使用 UTC 时间戳（毫秒），
+ * 不受服务器/浏览器时区影响。
+ *
+ * 核心原则：
+ * - Date.now() 返回 UTC 时间戳
+ * - 北京时间 = UTC 时间 + 8小时，所以北京时间的时间戳 = Date.now()
+ *   （同一瞬间，全球时间戳相同）
+ * - 获取"北京日期"（YYYY-MM-DD）需要加 8h 后取 UTC 日期
+ * - 比较时间直接用时间戳比较，不需要时区转换
+ */
 
-/** 获取北京时间的日期字符串 YYYY-MM-DD */
+/** 获取当前北京时间日期字符串 YYYY-MM-DD */
 export function getBeijingDateStr(date?: Date): string {
-  const d = date ?? getBeijingNow()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const ms = (date?.getTime() ?? Date.now()) + 8 * 60 * 60 * 1000
+  const d = new Date(ms)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
@@ -44,16 +50,21 @@ export function getCurrentMonthPrefix(): string {
   return getMonthPrefix(getBeijingDateStr())
 }
 
+/** 将北京时间日期和时分转换为 UTC 时间戳（用于比较） */
+function beijingSlotUTC(date: string, hour: number, minute: number): number {
+  const [y, m, d] = date.split('-').map(Number)
+  return Date.UTC(y, m - 1, d, hour - 8, minute)
+}
+
 /** 判断某个时段是否可预约 */
 export function isSlotBookable(date: string, slot: Slot): { bookable: boolean; reason: string | null } {
-  const now = getBeijingNow()
-  const slotStart = new Date(`${date}T${String(slot.startHour).padStart(2, '0')}:${String(slot.startMinute).padStart(2, '0')}:00+08:00`)
-
   if (isSunday(date)) {
     return { bookable: false, reason: '周日不可预约' }
   }
 
-  const hoursUntilStart = (slotStart.getTime() - now.getTime()) / (1000 * 60 * 60)
+  const slotUTC = beijingSlotUTC(date, slot.startHour, slot.startMinute)
+  const hoursUntilStart = (slotUTC - Date.now()) / (1000 * 60 * 60)
+
   if (hoursUntilStart < 12) {
     return { bookable: false, reason: '需提前12小时预约' }
   }
@@ -63,10 +74,9 @@ export function isSlotBookable(date: string, slot: Slot): { bookable: boolean; r
 
 /** 判断某个预约是否可以取消 */
 export function canCancelBooking(date: string, slot: Slot): { cancellable: boolean; reason: string | null } {
-  const now = getBeijingNow()
-  const slotStart = new Date(`${date}T${String(slot.startHour).padStart(2, '0')}:${String(slot.startMinute).padStart(2, '0')}:00+08:00`)
+  const slotUTC = beijingSlotUTC(date, slot.startHour, slot.startMinute)
+  const hoursUntilStart = (slotUTC - Date.now()) / (1000 * 60 * 60)
 
-  const hoursUntilStart = (slotStart.getTime() - now.getTime()) / (1000 * 60 * 60)
   if (hoursUntilStart < 2) {
     return { cancellable: false, reason: '距离开课不足2小时，不可取消' }
   }
