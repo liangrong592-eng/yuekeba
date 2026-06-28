@@ -12,11 +12,11 @@ export const SLOTS: readonly Slot[] = [
   { id: '18:30-19:30', label: '18:30 — 19:30', sublabel: '晚上', startHour: 18, startMinute: 30 },
 ] as const
 
-/** 获取当前北京时间（返回 Date 对象，时间戳已对齐到北京时间） */
+/** 获取当前北京时间（返回 Date 对象） */
 export function getBeijingNow(): Date {
   const now = new Date()
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000
-  return new Date(utcMs + 8 * 60 * 60 * 1000)
+  // now.getTime() 返回的是 UTC 毫秒数，直接加 8 小时偏移即可
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000)
 }
 
 /** 获取北京时间的日期字符串 YYYY-MM-DD */
@@ -28,12 +28,9 @@ export function getBeijingDateStr(date?: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** 判断某天是否是周日
- *  使用 Date.UTC 构造避免受服务器本地时区影响
- */
+/** 判断某天是否是周日 */
 export function isSunday(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number)
-  // Date.UTC 的参数是 UTC 时间，解析 YYYY-MM-DD 作为 UTC 日期，不受本地时区影响
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0
 }
 
