@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { getBeijingDateStr, isSunday } from '@/lib/time'
 
 interface Props {
@@ -30,7 +31,12 @@ export default function Header({ date, onChange }: Props) {
     <div className="bg-white" style={{height:72}}>
       <div className="mx-auto flex items-center justify-between px-5 h-full" style={{maxWidth:390}}>
         {/* 左：时间 */}
-        <div className="text-[28px] font-bold tracking-[-0.03em] text-[#1D1D1F] tabular-nums leading-none">{time||'--:--'}</div>
+        <div className="flex items-center gap-3">
+          <div className="text-[28px] font-bold tracking-[-0.03em] text-[#1D1D1F] tabular-nums leading-none">{time||'--:--'}</div>
+          <Link href="/cancel" className="text-[12px] text-[#86868B] tracking-[-0.01em] underline underline-offset-2 mt-1">
+            取消预约
+          </Link>
+        </div>
 
         {/* 右：可选日期 */}
         <div className="flex items-center gap-2">
