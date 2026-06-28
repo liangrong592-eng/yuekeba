@@ -12,20 +12,22 @@ export const SLOTS: readonly Slot[] = [
   { id: '18:30-19:30', label: '18:30 — 19:30', sublabel: '晚上', startHour: 18, startMinute: 30 },
 ] as const
 
-/** 获取当前北京时间 (Date 对象，时间已对齐到北京时间) */
+/** 获取当前北京时间（返回 Date 对象） */
 export function getBeijingNow(): Date {
   const now = new Date()
-  // 直接用 UTC 时间偏移 +8 小时计算，避免 toLocaleString 在不同环境下格式不一致
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000
+  // 返回时间戳正确的 Date，后续用 getHours/getDate 等本地方法获取北京时间
   return new Date(utcMs + 8 * 60 * 60 * 1000)
 }
 
 /** 获取北京时间的日期字符串 YYYY-MM-DD */
 export function getBeijingDateStr(date?: Date): string {
   const d = date ?? getBeijingNow()
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
+  // 注意：必须用 getFullYear/getMonth/getDate（本地方法），
+  // 因为 Date 对象的时间戳已经偏移到北京时间，本地方法返回的就是北京时间
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
