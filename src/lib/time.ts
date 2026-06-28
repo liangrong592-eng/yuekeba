@@ -12,29 +12,29 @@ export const SLOTS: readonly Slot[] = [
   { id: '18:30-19:30', label: '18:30 — 19:30', sublabel: '晚上', startHour: 18, startMinute: 30 },
 ] as const
 
-/** 获取当前北京时间（返回 Date 对象） */
+/** 获取当前北京时间（返回 Date 对象，时间戳已对齐到北京时间） */
 export function getBeijingNow(): Date {
   const now = new Date()
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000
-  // 返回时间戳正确的 Date，后续用 getHours/getDate 等本地方法获取北京时间
   return new Date(utcMs + 8 * 60 * 60 * 1000)
 }
 
 /** 获取北京时间的日期字符串 YYYY-MM-DD */
 export function getBeijingDateStr(date?: Date): string {
   const d = date ?? getBeijingNow()
-  // 注意：必须用 getFullYear/getMonth/getDate（本地方法），
-  // 因为 Date 对象的时间戳已经偏移到北京时间，本地方法返回的就是北京时间
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
-/** 判断某天是否是周日 */
+/** 判断某天是否是周日
+ *  使用 Date.UTC 构造避免受服务器本地时区影响
+ */
 export function isSunday(dateStr: string): boolean {
-  const d = new Date(dateStr + 'T00:00:00+08:00')
-  return d.getDay() === 0
+  const [y, m, d] = dateStr.split('-').map(Number)
+  // Date.UTC 的参数是 UTC 时间，解析 YYYY-MM-DD 作为 UTC 日期，不受本地时区影响
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0
 }
 
 /** 获取输入日期的月份前缀 YYYY-MM */
